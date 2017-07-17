@@ -1564,7 +1564,7 @@ begin
     varInteger,
     varWord:
       Result := API.ValueIntDataSet(SciterValue, Integer(Value), T_INT, 0);
-    varUInt32:
+    varLongWord:
       begin
         c32 := Value;
         Result := API.ValueIntDataSet(SciterValue, c32, T_INT, 0);
@@ -1622,7 +1622,7 @@ begin
             API.ValueStringDataSet(@val, PWideChar(rval.AsString), Length(rval.AsString), 0)
           else if rval.Kind = tkFloat then
           begin
-            date := TDateTime(rval.AsExtended);
+            date := rval.AsExtended;
             d := Double(date);
             VariantTimeToSystemTime(d, st);
             SystemTimeToFileTime(st, ft);

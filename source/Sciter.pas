@@ -938,7 +938,7 @@ procedure Register;
 implementation
 
 uses
-  SciterOle, Winapi.MLang;
+  SciterOle, MLang;
 
 var
   Behaviors: TList;
@@ -1452,10 +1452,13 @@ procedure TSciter.DestroyWnd;
 //var
 //  pbHandled: BOOL;
 begin
+  if not DesignMode then
+begin
   API.SciterSetCallback(Handle, nil, nil);
   API.SciterWindowAttachEventHandler(Handle, nil, nil, UINT(HANDLE_ALL));
   API.SciterSetupDebugOutput(Handle, nil, nil);
 //  API.SciterProcND(Handle, WM_DESTROY, 0, 0, pbHandled);
+  end;
   inherited;
 end;
 
@@ -2191,10 +2194,10 @@ begin
     // input string is null-terminated
     pcsrcSize := UINT(-1);
     // Get buffer size
-    pLang.ConvertStringFromUnicode(pdwMode, enc, PWideChar(sHtml), @pcSrcSize, nil, pcDstSize);
+    pLang.ConvertStringFromUnicode(pdwMode, enc, PWideChar(sHtml), pcSrcSize, nil, pcDstSize);
     // Performing conversion
     GetMem(pRet, pcDstSize + 2);
-    pLang.ConvertStringFromUnicode(pdwMode, enc, PWideChar(sHtml), @pcSrcSize, pRet, pcDstSize);
+    pLang.ConvertStringFromUnicode(pdwMode, enc, PWideChar(sHtml), pcSrcSize, pRet, pcDstSize);
 
     flags := fmOpenWrite;
     if not FileExists(FileName) then
