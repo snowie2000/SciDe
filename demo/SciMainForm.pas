@@ -6,7 +6,7 @@ uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
   Dialogs, SciterApi, TiScriptApi, Sciter, StdCtrls, OleCtrls,
   ExtCtrls, ComCtrls, Menus, ComObj, ActiveX, SciDeDemo_TLB,
-  ComServ, AppEvnts, ToolWin, ImgList, ActnList, ShellAPI, System.Actions, System.ImageList;
+  ComServ, AppEvnts, ToolWin, ImgList, ActnList, ShellAPI;
 
 type
   TMainForm = class(TForm)
@@ -508,7 +508,7 @@ begin
   begin
     ShowMessage('Method ' + Args.Method + ' is being called');
     Args.Handled := True;
-    Args.ReturnValue := 100;
+    Args.ReturnVariantValue := 100;
   end;
   // else Handled = False and Sciter will emit a warning message
 end;

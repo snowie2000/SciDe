@@ -822,6 +822,7 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+    function AppendMasterCSS(const CSSString: UTF8String): BOOL;
     function Call(const FunctionName: WideString; const Args: array of Variant): Variant;
     procedure Fire(he: HELEMENT; cmd: UINT; data: Variant; async: Boolean = True);
     procedure FireRoot(cmd: UINT; data: Variant; async: Boolean = True); overload;
@@ -844,6 +845,7 @@ type
     function GetPackedItem(const ResName: String; const FileName: PWideChar; var mem: TMemoryStream): Boolean;
     procedure MouseWheelHandler(var Message: TMessage); override;
     procedure Println(const Message: WideString; const Args: Array of const);
+    function HasComObject(const Name: WideString): Boolean;
     procedure RegisterComObject(const Name: WideString; const Obj: Variant); overload;
     procedure RegisterComObject(const Name: WideString; const Obj: IDispatch); overload;
     function RegisterNativeClass(const ClassInfo: ISciterClassInfo; ThrowIfExists: Boolean; ReplaceClassDef: Boolean = False): tiscript_class; overload;
@@ -866,10 +868,12 @@ type
     function TryCall(const FunctionName: WideString; const Args: array of Variant; out RetVal: Variant): boolean; overload;
     procedure UnsubscribeAll;
     procedure UpdateWindow;
+    procedure Refresh;
     property Html: WideString read GetHtml;
     property Root: IElement read GetRoot;
     property Version: WideString read GetVersion;
     property VM: HVM read GetHVM;
+    property URL: WideString read FUrl;
   published
     property Action;
     property Align;
@@ -1342,6 +1346,11 @@ begin
   FreeAndNil(FEventMap);
   Application.UnhookMainWindow(MainWindowHook);
   inherited;
+end;
+
+function TSciter.AppendMasterCSS(const CSSString: UTF8String): BOOL;
+begin
+  Result := API.SciterAppendMasterCSS(PAnsiChar(CSSString), Length(CSSString));
 end;
 
 procedure TSciter.BindStoredEventHandlers;
@@ -1908,6 +1917,18 @@ begin
   Result := False;
 end;
 
+function TSciter.HasComObject(const Name: WideString): Boolean;
+var
+  var_name: tiscript_value;
+  zns: tiscript_value;
+  class_define: tiscript_value;
+begin
+  var_name := NI.string_value(vm, PWideChar(Name), Length(Name));
+  zns := NI.get_global_ns(vm);
+  class_define := NI.get_prop(VM, zns, var_name);
+  result := NI.is_native_object(class_define);
+end;
+
 function TSciter.JsonToSciterValue(const Json: WideString): TSciterValue;
 var
   pObj: TSciterValue;
@@ -2086,6 +2107,12 @@ procedure TSciter.RegisterComObject(const Name: WideString;
   const Obj: Variant);
 begin
   SciterOle.RegisterOleObject(VM, IDispatch(Obj), Name);
+end;
+
+procedure TSciter.Refresh;
+begin
+  if FUrl <> '' then
+    LoadURL(FUrl);
 end;
 
 procedure TSciter.RegisterComObject(const Name: WideString;

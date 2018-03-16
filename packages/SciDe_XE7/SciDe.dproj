@@ -130,7 +130,7 @@
 					</VersionInfoKeys>
 				</Delphi.Personality>
 				<Deployment Version="3">
-					<DeployFile LocalName="C:\Users\Public\Documents\Embarcadero\Studio\15.0\Bpl\SciDe.bpl" Configuration="Debug" Class="ProjectOutput">
+					<DeployFile Class="ProjectOutput" Configuration="Debug" LocalName="C:\Users\Public\Documents\Embarcadero\Studio\15.0\Bpl\SciDe.bpl">
 						<Platform Name="Win32">
 							<RemoteName>SciDe.bpl</RemoteName>
 							<Overwrite>true</Overwrite>
@@ -278,7 +278,7 @@
 							<Extensions>.dll;.bpl</Extensions>
 						</Platform>
 					</DeployClass>
-					<DeployClass Required="true" Name="DependencyPackage">
+					<DeployClass Name="DependencyPackage" Required="true">
 						<Platform Name="iOSDevice32">
 							<Operation>1</Operation>
 							<Extensions>.dylib</Extensions>
@@ -333,7 +333,7 @@
 							<Operation>1</Operation>
 						</Platform>
 					</DeployClass>
-					<DeployClass Required="true" Name="ProjectOutput">
+					<DeployClass Name="ProjectOutput" Required="true">
 						<Platform Name="Android">
 							<RemoteDir>library\lib\armeabi-v7a</RemoteDir>
 							<Operation>1</Operation>

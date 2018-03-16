@@ -1271,7 +1271,7 @@ begin
   begin
     raise ESciterException.CreateFmt('Failed to register native class "%s". Object with same name (class, namespace, constant, variable or function) already exists.', [String(ClassDef.name)]);
   end;
-end;
+ end;
 
 function SciterVarType(value: PSciterValue): TSciterValueType;
 var
