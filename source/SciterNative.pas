@@ -350,7 +350,10 @@ begin
   FMethods := nil;
   FAllMethods := nil;
   if FSciterClassDef <> nil then
+  begin
+    FreeClassDef();
     Dispose(FSciterClassDef);
+  end;
   inherited;
 end;
 
