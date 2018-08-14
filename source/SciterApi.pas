@@ -1033,6 +1033,50 @@ type
     function IsClear(const V: TVarData): Boolean; override;
   end;
 
+  //added by snowie
+  TDispatchKind = (dkMethod, dkProperty, dkSubComponent);
+
+  TDispatchInfo = record
+    Instance: TObject;
+    case Kind: TDispatchKind of
+      dkMethod:
+        (MethodInfo: ShortString);
+      dkProperty:
+        (PropInfo: ShortString);
+      dkSubComponent:
+        (Index: Integer);
+  end;
+
+  type
+    PVariantArray = ^TVariantArray;
+    TVariantArray = array [0 .. 65535] of Variant;
+    PIntegerArray = ^TIntegerArray;
+    TIntegerArray = array [0 .. 65535] of Integer;
+
+  IScriptFunction = interface
+    ['{35A4060B-209F-43CD-B235-0CD64E2A2241}']
+    function IsValueEqual(sv: PSciterValue): Boolean;
+  end;
+
+  TScriptFunction = class(TInterfacedObject, IDispatch, IScriptFunction)
+  private
+    FSciterValue: TSciterValue;
+    FNameDispIDList: TStringList;
+  protected
+    function IsValueEqual(sv: PSciterValue): Boolean;
+    function AllocNameDispID(szName: string): TDispID;
+    { IDispatch }
+    function GetIDsOfNames(const IID: TGUID; Names: Pointer; NameCount: Integer; LocaleID: Integer; DispIDs: Pointer)
+      : HRESULT; virtual; stdcall;
+    function GetTypeInfo(Index: Integer; LocaleID: Integer; out TypeInfo): HRESULT; stdcall;
+    function GetTypeInfoCount(out Count: Integer): HRESULT; stdcall;
+    function Invoke(DispID: Integer; const IID: TGUID; LocaleID: Integer; Flags: Word; var Params; VarResult: Pointer;
+      ExcepInfo: Pointer; ArgErr: Pointer): HRESULT; virtual; stdcall;
+  public
+    constructor Create(sv: TSciterValue);
+    destructor Destroy; override;
+  end;
+
 { Conversion functions. Mnemonics are: T - tiscript_value, S - TSciterValue, V - VARIANT }
 function S2V(Value: PSciterValue; var OutValue: Variant): UINT;
 function V2S(const Value: Variant; SciterValue: PSciterValue): UINT;
@@ -1486,6 +1530,12 @@ begin
                 Result := S2V(Value, OutValue);
                 Exit;
               end;
+            UT_OBJECT_FUNCTION:
+              begin
+                OutValue := TScriptFunction.Create(Value^) as IDispatch;
+                Result := HV_OK;
+                Exit;
+              end;
           end;
 
           OutValue := GetNativeObjectJson(Value);
@@ -1702,6 +1752,192 @@ begin
   inherited CreateFmt('Method "%s" call failed.', [MethodName]);
 end;
 
+
+{ TScriptFunction }
+
+const
+  ofDispParamIDOffset = 200;
+
+  { Helper Functions }
+
+function TScriptFunction.AllocNameDispID(szName: string): TDispID;
+begin
+  Result := FNameDispIDList.IndexOf(szName);
+  if Result = -1 then
+  begin
+    FNameDispIDList.Add(szName);
+    Result := FNameDispIDList.Count - 1;
+  end;
+  Inc(Result, ofDispParamIDOffset);
+end;
+
+
+procedure WideCharToShortString(P: PWideChar; var S: ShortString);
+begin
+//  S[0] := AnsiChar(UnicodeToUtf8(@S[1], 255, P, Cardinal(-1)) - 1);
+  S := string(P);
+end;
+
+constructor TScriptFunction.Create(sv: TSciterValue);
+begin
+  inherited Create();
+  FSciterValue := sv;
+  FNameDispIDList := TStringList.Create;
+end;
+
+destructor TScriptFunction.Destroy;
+begin
+  FNameDispIDList.Free;
+  inherited;
+end;
+
+function TScriptFunction.GetIDsOfNames(const IID: TGUID; Names: Pointer;
+  NameCount, LocaleID: Integer; DispIDs: Pointer): HRESULT;
+type
+  PNames = ^TNames;
+  TNames = array [0 .. 100] of POleStr;
+  PDispIDs = ^TDispIDs;
+  TDispIDs = array [0 .. 100] of Cardinal;
+var
+  Name: ShortString;
+  aDispInfo: TDispatchInfo;
+  I: Integer;
+begin
+  Result := S_OK;
+  WideCharToShortString(PNames(Names)^[0], Name); // get name
+  FillChar(DispIDs^, SizeOf(PDispIDs(DispIDs^)[0]) * NameCount, $FF);
+
+  aDispInfo.Instance := nil;
+  aDispInfo.Kind := dkProperty;
+  aDispInfo.PropInfo := Name;
+
+  if SameText(Name, 'Call') then
+  begin
+    aDispInfo.Kind := dkMethod;
+    PDispIDs(DispIDs)^[0] := 201;   //调用执行函数，固定为201
+  end;
+
+  if SameText(Name, 'Equal') then
+  begin
+    aDispInfo.Kind := dkMethod;
+    PDispIDs(DispIDs)^[0] := 202;   //是否相等，固定为202
+  end;
+
+  // we fill ids of params which may used in find proc
+  for I := 1 to NameCount - 1 do
+  begin
+    WideCharToShortString(PNames(Names)^[I], Name);
+    PDispIDs(DispIDs)^[I] := AllocNameDispID(Name);
+  end;
+end;
+
+function TScriptFunction.GetTypeInfo(Index, LocaleID: Integer;
+  out TypeInfo): HRESULT;
+begin
+  Result := E_NOTIMPL;
+end;
+
+
+function TScriptFunction.GetTypeInfoCount(out Count: Integer): HRESULT;
+begin
+  Result := E_NOTIMPL;
+end;
+
+
+function TScriptFunction.Invoke(DispID: Integer; const IID: TGUID;
+  LocaleID: Integer; Flags: Word; var Params; VarResult, ExcepInfo,
+  ArgErr: Pointer): HRESULT;
+var
+  Parms: PDispParams;
+  TempRet: Variant;
+  ret: TSciterValue;
+  scParams: TArray<TSciterValue>;
+  I: Integer;
+  isf: IScriptFunction;
+
+  function _IsSciterFunction(v: Variant): Boolean;
+  begin
+    Result := (not VarIsEmpty(v)) and (FindVarData(v)^.VType = varDispatch);
+  end;
+
+  function _VarToDisp(v: Variant): IDispatch;
+  var
+    Dispatch: Pointer;
+  begin
+    if FindVarData(v)^.VType = varDispatch then
+      Dispatch := FindVarData(v)^.VDispatch
+    else if FindVarData(v)^.VType = (varDispatch or varByRef) then
+      Dispatch := Pointer(FindVarData(v)^.VPointer^);
+    Result := IDispatch(Dispatch);
+  end;
+
+begin
+  Result := S_OK;
+
+  Parms := @Params;
+  try
+    if VarResult = nil then
+      VarResult := @TempRet;
+
+    case DispID of
+      201:
+        begin      // call method
+          SetLength(scParams, Parms.cArgs);
+          for I := 0 to Parms.cArgs-1 do
+          begin
+            API.ValueInit(@scParams[I]);
+            V2S(PVariantArray(Parms.rgvarg)^[Parms.cArgs - 1 - I], @scParams[I]);
+          end;
+
+          if Parms.cArgs = 0 then
+            API.ValueInvoke(@FSciterValue, @FSciterValue, 0, nil, ret, nil)
+          else
+            API.ValueInvoke(@FSciterValue, @FSciterValue, Parms.cArgs, @scParams[0], ret, nil);
+          for I := 0 to Parms.cArgs-1 do
+          begin
+            API.ValueClear(@scParams[I]);
+          end;
+
+          API.ValueClear(@ret);
+        end;
+      202:
+        begin
+          // equal method, unfinished
+          if Parms.cArgs <> 1 then
+            Result := DISP_E_BADPARAMCOUNT
+          else
+          begin
+            if (_IsSciterFunction(PVariantArray(Parms.rgvarg)^[0]) and Supports(_VarToDisp(PVariantArray(Parms.rgvarg)^[0]), IScriptFunction, isf)) then
+            begin
+              // need to return the result
+              isf.IsValueEqual(@FSciterValue);
+            end;
+          end;
+        end
+      else
+        Result := DISP_E_MEMBERNOTFOUND;
+    end;
+  except
+    if ExcepInfo <> nil then
+    begin
+      FillChar(ExcepInfo^, SizeOf(TExcepInfo), 0);
+      with TExcepInfo(ExcepInfo^) do
+      begin
+        bstrSource := StringToOleStr(ClassName);
+        if ExceptObject is Exception then
+          bstrDescription := StringToOleStr(Exception(ExceptObject).Message);
+        scode := E_FAIL;
+      end;
+    end;
+    Result := DISP_E_EXCEPTION;
+  end;
+end;
+
+function TScriptFunction.IsValueEqual(sv: PSciterValue): Boolean;
+begin
+  Result := API.ValueCompare(sv, @FSciterValue) = HV_OK_TRUE;
+end;
+
 initialization
   HSCITER := 0;
   RecordVariantType := TRecordVariantType.Create;
@@ -1711,5 +1947,6 @@ finalization
   FreeAndNil(RecordVariantType);
   if HSCITER <> 0 then
     FreeLibrary(HSCITER);
-
 end.
+
+
