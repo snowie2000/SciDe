@@ -1886,7 +1886,10 @@ begin
           for I := 0 to Parms.cArgs-1 do
           begin
             API.ValueInit(@scParams[I]);
-            V2S(PVariantArray(Parms.rgvarg)^[Parms.cArgs - 1 - I], @scParams[I]);
+            try
+              V2S(PVariantArray(Parms.rgvarg)^[Parms.cArgs - 1 - I], @scParams[I]);
+            except
+            end;
           end;
 
           if Parms.cArgs = 0 then
