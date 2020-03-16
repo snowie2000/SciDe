@@ -278,6 +278,7 @@ type
     destructor Destroy; override;
     property Element: IElement read FElement;
     property Handled: Boolean read FHandled write FHandled;
+    property Sciter: TSciter read FSciter;
   end;
 
   TElementOnBehaviorEvent = procedure(ASender: TObject; const Args: TElementOnBehaviorEventArgs) of object;
@@ -825,6 +826,7 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     function AppendMasterCSS(const CSSString: UTF8String): BOOL;
+    function SetMasterCSS(const CSSString: UTF8String): BOOL;
     function Call(const FunctionName: WideString; const Args: array of Variant): Variant;
     procedure Fire(he: HELEMENT; cmd: UINT; data: Variant; async: Boolean = True);
     procedure FireRoot(cmd: UINT; data: Variant; async: Boolean = True); overload;
@@ -851,7 +853,7 @@ type
     procedure RegisterComObject(const Name: WideString; const Obj: Variant); overload;
     procedure RegisterComObject(const Name: WideString; const Obj: IDispatch); overload;
     function RegisterNativeClass(const ClassInfo: ISciterClassInfo; ThrowIfExists: Boolean; ReplaceClassDef: Boolean = False): tiscript_class; overload;
-    function RegisterNativeClass(const ClassDef: ptiscript_class_def; ThrowIfExists: Boolean; ReplaceClassDef: Boolean { reserved }    = False): tiscript_class; overload;
+    function RegisterNativeClass(const ClassDef: ptiscript_class_def; ThrowIfExists: Boolean; ReplaceClassDef: Boolean { reserved }      = False): tiscript_class; overload;
     procedure RegisterNativeFunction(const Name: WideString; Handler: ptiscript_method; ns: tiscript_value = 0);
     procedure RegisterNativeFunctionTag(const Name: WideString; Handler: ptiscript_tagged_method; ns: tiscript_value; Tag: Pointer);
     class procedure RegisterNativeFunctor(var OutVal: TSciterValue; Name: PWideChar; Handler: Pointer; Tag: Pointer = nil);
@@ -1995,7 +1997,11 @@ begin
   FHtml := '';
   FBaseUrl := '';
 
-  Result := API.SciterLoadFile(Handle, PWideChar(URL));
+  try
+    Result := API.SciterLoadFile(Handle, PWideChar(URL));
+  except
+    Result := False;
+  end;
 end;
 
 function TSciter.LoadPackedResource(const ResName: string; const ResType: PWideChar): Boolean;
@@ -2298,6 +2304,11 @@ begin
     raise ESciterException.Create('Failed to set Sciter home URL');
 end;
 
+function TSciter.SetMasterCSS(const CSSString: UTF8String): BOOL;
+begin
+  Result := API.SciterSetMasterCSS(PAnsiChar(CSSString), Length(CSSString));
+end;
+
 function TSciter.SetMediaType(const MediaType: WideString): Boolean;
 begin
   Result := API.SciterSetMediaType(Handle, PWideChar(MediaType));
@@ -2417,6 +2428,8 @@ var
   SR: BOOL;
 begin
   sFunctionName := AnsiString(FunctionName);
+  if not SameText(VarToStrDef(Self.Eval(FunctionName+'==undefined'), ''), 'false') then Exit(False);
+
   API.ValueInit(@pVal);
 
   cArgs := Length(Args);
@@ -2500,7 +2513,8 @@ begin
         end;
     end;
 
-    llResult := API.SciterProcND(Handle, Message.Msg, Message.WParam, Message.LParam, bHandled);
+    if IsWindow(Handle) then
+      llResult := API.SciterProcND(Handle, Message.Msg, Message.WParam, Message.LParam, bHandled);
     if bHandled then
       Message.Result := llResult
     else

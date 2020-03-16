@@ -14,7 +14,8 @@ unit SciterApi;
 interface
 
 uses
-  Windows, Classes, SysUtils, TypInfo, ActiveX, RTTI, Variants, TiScriptApi;
+  Windows, Classes, SysUtils, TypInfo, ActiveX, RTTI, Variants, TiScriptApi,
+  Themes;
 
 const
   SIH_REPLACE_CONTENT      = 0;
@@ -1102,7 +1103,7 @@ procedure ThrowError(const vm: HVM; const Message: WideString); overload;
 function GetNativeObjectJson(const Value: PSciterValue): WideString;
 
 var
-  SCITER_DLL_DIR: String = '';
+  SCITER_DLL_FILENAME: string = 'Sciter.dll';
   varRecordEx: Word = 0;
 
 implementation
@@ -1377,13 +1378,13 @@ var
 begin
   if FAPI = nil then
   begin
-    HSCITER := LoadLibrary(PWideChar(SCITER_DLL_DIR + 'sciter.dll'));
+    HSCITER := LoadLibrary(PWideChar(SCITER_DLL_FILENAME));
     if HSCITER = 0 then
-      raise ESciterException.Create('Failed to load Sciter DLL.');
+      raise ESciterException.Create('无法加载 Sciter DLL, 请检查文件是否存在。');
 
     pFuncPtr := GetProcAddress(HSCITER, 'SciterAPI');
     if pFuncPtr = nil then
-      raise ESciterException.Create('Failed to get pointer to SciterAPI function.');
+      raise ESciterException.Create('无法初始化 SciterAPI，请确保您的杀毒软件没有阻止');
 
     FAPI := pFuncPtr();
   end;
@@ -1781,12 +1782,14 @@ end;
 constructor TScriptFunction.Create(sv: TSciterValue);
 begin
   inherited Create();
-  FSciterValue := sv;
+  API.ValueInit(@FSciterValue);
+  API.ValueCopy(@FSciterValue, @sv);
   FNameDispIDList := TStringList.Create;
 end;
 
 destructor TScriptFunction.Destroy;
 begin
+  API.ValueClear(@FSciterValue);
   FNameDispIDList.Free;
   inherited;
 end;
@@ -1851,9 +1854,12 @@ var
   Parms: PDispParams;
   TempRet: Variant;
   ret: TSciterValue;
+  pt: TSciterValueType;
   scParams: TArray<TSciterValue>;
   I: Integer;
+  scResult: Cardinal;
   isf: IScriptFunction;
+  dummy: UINT;
 
   function _IsSciterFunction(v: Variant): Boolean;
   begin
@@ -1882,6 +1888,15 @@ begin
     case DispID of
       201:
         begin      // call method
+          try
+            if (API.ValueType(@FSciterValue, pt, dummy)<>0) or (pt<>T_OBJECT) then
+            begin
+              Result:=E_FAIL;
+              Exit;
+            end;
+          except
+            Result := E_FAIL;
+          end;
           SetLength(scParams, Parms.cArgs);
           for I := 0 to Parms.cArgs-1 do
           begin
@@ -1891,11 +1906,13 @@ begin
             except
             end;
           end;
-
+          POleVariant(VarResult)^ := 1;
           if Parms.cArgs = 0 then
-            API.ValueInvoke(@FSciterValue, @FSciterValue, 0, nil, ret, nil)
+            scResult := API.ValueInvoke(@FSciterValue, @FSciterValue, 0, nil, ret, nil)
           else
-            API.ValueInvoke(@FSciterValue, @FSciterValue, Parms.cArgs, @scParams[0], ret, nil);
+            scResult := API.ValueInvoke(@FSciterValue, @FSciterValue, Parms.cArgs, @scParams[0], ret, nil);
+          if scResult <> HV_OK then
+            POleVariant(VarResult)^ := 0;
           for I := 0 to Parms.cArgs-1 do
           begin
             API.ValueClear(@scParams[I]);
